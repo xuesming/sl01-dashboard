@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SL01安装信息可视化平台</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- XLSX -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+        }
+        body {
+            background: #0a1628;
+            color: #e8edf5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #dashboard {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 12px 16px 16px 16px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #60b0ff, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            white-space: nowrap;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .upload-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .upload-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #cbd5e1;
+            padding: 6px 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: 0.3s;
+            backdrop-filter: blur(4px);
+            white-space: nowrap;
+        }
+        .upload-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+            border-color: #60b0ff;
+        }
+        .upload-btn input {
+            display: none;
+        }
+        .status-badge {
+            background: rgba(96, 176, 255, 0.15);
+            padding: 4px 14px;
+            border-radius: 30px;
+            font-size: 12px;
+            color: #93c5fd;
+            border: 1px solid rgba(96, 176, 255, 0.2);
+            white-space: nowrap;
+        }
+
+        /* ---------- 搜索区 ---------- */
+        .search-area {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            padding: 3px 6px 3px 3px;
+            transition: 0.3s;
+        }
+        .search-area:focus-within {
+            border-color: rgba(96, 176, 255, 0.6);
+            box-shadow: 0 0 0 3px rgba(96, 176, 255, 0.1);
+        }
+        .search-select {
+            background: rgba(96, 176, 255, 0.14);
+            border: none;
+            color: #bfdbfe;
+            border-radius: 30px;
+            padding: 5px 8px;
+            font-size: 12px;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            text-align: center;
+        }
+        .search-select option {
+            background: #0f1f33;
+            color: #e8edf5;
+        }
+        .search-input {
+            background: transparent;
+            border: none;
+            color: #e8edf5;
+            font-size: 13px;
+            outline: none;
+            width: 170px;
+            padding: 4px 2px;
+        }
+        .search-input::placeholder {
+            color: #64748b;
+        }
+        .search-clear {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: #94a3b8;
+            width: 22px;
+            height: 22px;
+            line-height: 1;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 11px;
+            transition: 0.2s;
+            flex-shrink: 0;
+        }
+        .search-clear:hover {
+            background: rgba(239, 68, 68, 0.25);
+            color: #fca5a5;
+        }
+        .result-badge {
+            font-size: 12px;
+            color: #34d399;
+            white-space: nowrap;
+            padding: 0 4px;
+        }
+        .result-badge.empty {
+            color: #f87171;
+        }
+
+        .stats {
+            display: flex;
+            gap: 16px;
+            padding: 12px 0 10px 0;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(4px);
+            padding: 6px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            min-width: 100px;
+            flex: 1 0 auto;
+            text-align: center;
+        }
+        .stat-item .label {
+            font-size: 11px;
+            color: #94a3b8;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .stat-item .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #f0f4ff;
+            margin-top: 2px;
+        }
+        .stat-item .value small {
+            font-size: 13px;
+            font-weight: 400;
+            color: #94a3b8;
+            margin-left: 4px;
+        }
+        .stat-item.highlight {
+            border-color: rgba(96, 176, 255, 0.25);
+            background: rgba(96, 176, 255, 0.06);
+        }
+        /* 点击切换设备总数显示 */
+        .stat-item.highlight.clickable {
+            cursor: pointer;
+            user-select: none;
+            transition: 0.2s;
+        }
+        .stat-item.highlight.clickable:hover {
+            background: rgba(96, 176, 255, 0.14);
+            border-color: rgba(96, 176, 255, 0.45);
+        }
+        .stat-item.highlight.clickable:active {
+            transform: scale(0.98);
+        }
+        .stat-item .hint {
+            font-size: 10px;
+            color: #475569;
+            margin-top: 2px;
+            letter-spacing: 0.3px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            gap: 14px;
+            min-height: 0;
+        }
+        .map-wrapper {
+            flex: 3;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: #0f1f33;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #0f1f33;
+        }
+        .reset-view-btn {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 40, 70, 0.8);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #e8edf5;
+            padding: 6px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: 0.3s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        .reset-view-btn:hover {
+            background: rgba(40, 70, 120, 0.9);
+            border-color: #60b0ff;
+        }
+        .charts-panel {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 0;
+        }
+        .chart-row {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            min-height: 0;
+        }
+        .chart-box {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 6px 8px 4px 8px;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .chart-box .chart-title {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 2px;
+            text-align: center;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        .chart-container {
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+        }
+
+        /* ---------- Popup ---------- */
+        .leaflet-popup-content {
+            color: #1e293b;
+            font-size: 12px;
+            line-height: 1.5;
+            min-width: 190px;
+        }
+        .leaflet-popup-content .popup-title {
+            font-weight: 700;
+            font-size: 15px;
+            color: #1e3a8a;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 3px;
+            margin-bottom: 4px;
+        }
+        .leaflet-popup-content .popup-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 1px 0;
+        }
+        .leaflet-popup-content .popup-row .lbl {
+            color: #475569;
+            flex-shrink: 0;
+        }
+        .leaflet-popup-content .popup-row .val {
+            font-weight: 500;
+            color: #0f172a;
+            text-align: right;
+            word-break: break-all;
+        }
+        /* 多设备列表 */
+        .leaflet-popup-content .popup-hint {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+        .leaflet-popup-content .popup-list {
+            max-height: 250px;
+            overflow-y: auto;
+            margin: 0 -6px;
+            padding: 0 2px;
+        }
+        .leaflet-popup-content .popup-list::-webkit-scrollbar {
+            width: 5px;
+        }
+        .leaflet-popup-content .popup-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .leaflet-popup-content .popup-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.15s;
+        }
+        .leaflet-popup-content .popup-list-item:last-child {
+            border-bottom: none;
+        }
+        .leaflet-popup-content .popup-list-item:hover {
+            background: #eff6ff;
+        }
+        .leaflet-popup-content .pli-name {
+            font-weight: 600;
+            color: #1e3a8a;
+            font-size: 12px;
+        }
+        .leaflet-popup-content .pli-sub {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 1px;
+        }
+        .leaflet-popup-content .pli-arrow {
+            color: #94a3b8;
+            font-size: 17px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .leaflet-popup-content .popup-back {
+            display: inline-block;
+            font-size: 11px;
+            color: #2563eb;
+            cursor: pointer;
+            margin-bottom: 6px;
+            padding: 2px 10px;
+            background: #eff6ff;
+            border-radius: 20px;
+            user-select: none;
+        }
+        .leaflet-popup-content .popup-back:hover {
+            background: #dbeafe;
+        }
+
+        .loading-tip {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #94a3b8;
+            font-size: 14px;
+            pointer-events: none;
+            text-align: center;
+            background: rgba(11, 26, 47, 0.7);
+            padding: 16px 24px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            z-index: 500;
+        }
+        .loading-tip .icon {
+            font-size: 32px;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                flex-direction: column;
+            }
+            .map-wrapper {
+                flex: 2;
+                min-height: 300px;
+            }
+            .charts-panel {
+                flex: 1;
+                min-height: 300px;
+            }
+            .chart-row {
+                flex-direction: column;
+            }
+            .search-input {
+                width: 110px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="dashboard">
+        <div class="header">
+            <h1>📡 SL01安装信息可视化平台</h1>
+            <div class="header-right">
+                <div class="search-area">
+                    <select id="searchType" class="search-select" title="搜索字段">
+                        <option value="all">全部</option>
+                        <option value="sn">SN</option>
+                        <option value="month">月份</option>
+                        <option value="city">城市</option>
+                    </select>
+                    <input type="text" id="searchInput" class="search-input" placeholder="输入关键词搜索..." list="searchSuggestions" autocomplete="off" />
+                    <datalist id="searchSuggestions"></datalist>
+                    <button class="search-clear" id="clearSearchBtn" title="清除搜索">✕</button>
+                </div>
+                <span class="result-badge" id="resultBadge" style="display:none;"></span>
+                <span class="status-badge" id="fileStatus">未加载数据</span>
+                <label class="upload-btn">
+                    📂 上传 Excel
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+                </label>
+            </div>
+        </div>
+
+        <div class="stats" id="statsContainer">
+            <div class="stat-item highlight clickable" id="deviceCountBox" title="点击切换：全部 / 有位置-全部">
+                <div class="label">设备总数</div>
+                <div class="value" id="totalDevices">0</div>
+                <div class="hint">点击切换</div>
+            </div>
+            <div class="stat-item">
+                <div class="label">覆盖地点</div>
+                <div class="value" id="totalLocations">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="label">平均温度</div>
+                <div class="value" id="avgTemp">-- <small>°C</small></div>
+            </div>
+            <div class="stat-item">
+                <div class="label">闸杆类型</div>
+                <div class="value" id="poleTypes">--</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="map-wrapper">
+                <div id="map"></div>
+                <button class="reset-view-btn" id="resetViewBtn">🔄 重置视图</button>
+                <div class="loading-tip" id="loadingTip">
+                    <span class="icon">🗺️</span>
+                    上传 Excel 文件加载数据
+                </div>
+            </div>
+            <div class="charts-panel">
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="chart-title">固件版本</div>
+                        <div id="chartFirmware" class="chart-container"></div>
+                    </div>
+                    <div class="chart-box">
+                        <div class="chart-title">闸杆类型</div>
+                        <div id="chartPoleType" class="chart-container"></div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="chart-title">杆长分段</div>
+                        <div id="chartPoleLength" class="chart-container"></div>
+                    </div>
+                    <div class="chart-box">
+                        <div class="chart-title">设备月度安装数量</div>
+                        <div id="chartMonthly" class="chart-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map = null;
+        let markerLayer = null;
+        let allDevices = [];          // 全量数据（每台设备最新一条，包含无位置记录）
+        let currentDevices = [];      // 当前筛选后展示的数据
+        let deviceIndex = new Map();  // __id -> device
+        let activeMarker = null;      // 当前打开 popup 的 marker
+
+        let monthOptions = [];
+        let cityOptions = [];
+
+        let chartFirmware = null;
+        let chartPoleType = null;
+        let chartPoleLength = null;
+        let chartMonthly = null;
+
+        // 设备总数显示切换状态
+        let deviceCountExpanded = false;
+        let currentStats = { total: 0, located: 0 };
+
+        // ---------------- 工具函数 ----------------
+        function esc(s) {
+            return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function hasLocation(d) {
+            return !!(d && d.location && d.location.lat && d.location.lng);
+        }
+
+        // Excel 序列号 -> 本地日期字符串
+        function excelSerialToDateStr(n) {
+            const ms = Math.round((n - 25569) * 86400 * 1000);
+            const d = new Date(ms);
+            if (isNaN(d.getTime())) return '';
+            const p = x => String(x).padStart(2, '0');
+            return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ` +
+                   `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+        }
+
+        // 规范化 timestamp 字段
+        function normalizeTimestamp(ts) {
+            if (ts === null || ts === undefined || ts === '') return '';
+            if (ts instanceof Date) return isNaN(ts) ? '' : ts.toISOString();
+            if (typeof ts === 'number') return excelSerialToDateStr(ts);
+            const s = String(ts).trim();
+            if (/^\d+(\.\d+)?$/.test(s)) {
+                const n = parseFloat(s);
+                if (n > 20000 && n < 60000) return excelSerialToDateStr(n);
+            }
+            return s;
+        }
+
+        // 健壮的日期解析
+        function parseDate(ts) {
+            if (!ts) return null;
+            if (ts instanceof Date) return isNaN(ts.getTime()) ? null : ts;
+            const s = String(ts).trim();
+            if (!s) return null;
+            let d = new Date(s.replace(' ', 'T'));
+            if (!isNaN(d.getTime())) return d;
+            d = new Date(s);
+            if (!isNaN(d.getTime())) return d;
+            return null;
+        }
+
+        function getMonthKey(dev) {
+            const d = parseDate(dev.timestamp);
+            if (!d) return '';
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        // 从地址中提取「市」
+        function extractCity(address) {
+            if (!address || typeof address !== 'string') return '';
+            const m1 = address.match(/([^省市区县]{2,10}?)(市)/);
+            if (m1) return m1[1] + '市';
+            const m2 = address.match(/([\u4e00-\u9fa5]{2,10}?)(自治州|地区|盟)/);
+            if (m2) return m2[1] + m2[2];
+            return '';
+        }
+
+        // ---------------- 地图 ----------------
+        function initMap() {
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 3,
+                minZoom: 3,
+                maxZoom: 18,
+                zoomControl: true,
+            });
+
+            // 主瓦片：高德深色 (style=8)
+            const mainLayer = L.tileLayer('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                attribution: '&copy; 高德地图',
+                maxZoom: 18,
+                minZoom: 3,
+                subdomains: '1234',
+            });
+
+            // 备用瓦片：CartoDB 深色
+            const fallbackLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; CartoDB',
+                maxZoom: 19,
+                minZoom: 3,
+                subdomains: 'abcd',
+            });
+
+            mainLayer.addTo(map);
+            mainLayer.on('tileerror', function() {
+                console.warn('高德深色瓦片加载失败，切换至备用深色瓦片');
+                map.removeLayer(mainLayer);
+                fallbackLayer.addTo(map);
+            });
+
+            map.getContainer().style.background = '#0f1f33';
+
+            markerLayer = L.layerGroup().addTo(map);
+            document.getElementById('loadingTip').style.display = 'none';
+
+            document.getElementById('resetViewBtn').addEventListener('click', function() {
+                fitToMarkers();
+            });
+
+            // 点击设备总数区域，切换显示：全部 ↔ 有位置/全部
+            document.getElementById('deviceCountBox').addEventListener('click', function() {
+                deviceCountExpanded = !deviceCountExpanded;
+                renderDeviceCount();
+            });
+        }
+
+        function fitToMarkers() {
+            const layers = markerLayer.getLayers();
+            if (layers.length > 0) {
+                const group = new L.featureGroup(layers);
+                const bounds = group.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6, minZoom: 3 });
+                }
+            } else {
+                map.setView([20, 0], 3);
+            }
+        }
+
+        // ---------------- 解析 Excel ----------------
+        function parseExcelData(workbook) {
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+            if (!json || json.length === 0) {
+                alert('Excel 文件为空或格式不正确。');
+                return null;
+            }
+            const records = json.map(row => {
+                let location = null;
+                try {
+                    const locStr = row.location || '{}';
+                    const locObj = typeof locStr === 'string' ? JSON.parse(locStr) : locStr;
+                    if (locObj && typeof locObj.latitude === 'number' && typeof locObj.longitude === 'number') {
+                        location = {
+                            lat: locObj.latitude,
+                            lng: locObj.longitude,
+                            accuracy: locObj.accuracy || null,
+                            locatedAt: locObj.locatedAt || null,
+                        };
+                    }
+                } catch (e) { /* ignore */ }
+
+                let protectionArea = null;
+                try {
+                    const paStr = row.protectionArea || '{}';
+                    protectionArea = typeof paStr === 'string' ? JSON.parse(paStr) : paStr;
+                } catch (e) { /* ignore */ }
+
+                let version = null;
+                try {
+                    const verStr = row.version || '{}';
+                    version = typeof verStr === 'string' ? JSON.parse(verStr) : verStr;
+                } catch (e) { /* ignore */ }
+
+                const address = row.address || '';
+                return {
+                    timestamp: normalizeTimestamp(row.timestamp),
+                    deviceName: row.deviceName || '',
+                    radarSN: row.radarSN || '',
+                    temperature: isNaN(parseFloat(row.temperature)) ? null : parseFloat(row.temperature),
+                    location: location,
+                    protectionArea: protectionArea,
+                    version: version,
+                    address: address,
+                    city: extractCity(address),
+                    installSide: protectionArea?.installSide || '',
+                    poleLength: protectionArea?.poleLength !== undefined ? parseFloat(protectionArea.poleLength) : null,
+                    poleType: protectionArea?.poleType || '',
+                    firmware: version?.firmware || '',
+                };
+            });
+
+            // 不再过滤无位置记录：保留全部数据用于统计与图表
+            const locatedCount = records.filter(r => hasLocation(r)).length;
+            if (locatedCount === 0) {
+                console.warn('未找到有效的经纬度数据，地图将不显示任何标记。');
+            }
+            return records;
+        }
+
+        function getLatestBySN(records) {
+            const map = new Map();
+            records.forEach(rec => {
+                const sn = rec.deviceName || 'unknown';
+                const existing = map.get(sn);
+                const t1 = parseDate(rec.timestamp);
+                const t2 = existing ? parseDate(existing.timestamp) : null;
+                if (!existing || (t1 && (!t2 || t1 > t2))) {
+                    map.set(sn, rec);
+                }
+            });
+            return Array.from(map.values());
+        }
+
+        // ---------------- 统计 ----------------
+        function renderDeviceCount() {
+            const el = document.getElementById('totalDevices');
+            if (!el) return;
+            const { total, located } = currentStats;
+            if (deviceCountExpanded) {
+                el.innerHTML = `${located} <small>/ ${total}</small>`;
+            } else {
+                el.textContent = total;
+            }
+        }
+
+        function updateStats(devices) {
+            const total = devices.length;
+            const located = devices.filter(d => hasLocation(d)).length;
+            currentStats = { total, located };
+            renderDeviceCount();
+
+            // 覆盖地点：只统计有位置的
+            const locSet = new Set();
+            devices.forEach(d => {
+                if (!hasLocation(d)) return;
+                if (d.address) locSet.add(d.address);
+                else locSet.add(`${d.location.lat.toFixed(4)},${d.location.lng.toFixed(4)}`);
+            });
+            document.getElementById('totalLocations').textContent = locSet.size;
+
+            // 平均温度：包含全部设备
+            const temps = devices.map(d => d.temperature).filter(t => t !== null && !isNaN(t));
+            if (temps.length > 0) {
+                const avg = (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1);
+                document.getElementById('avgTemp').innerHTML = `${avg} <small>°C</small>`;
+            } else {
+                document.getElementById('avgTemp').innerHTML = '-- <small>°C</small>';
+            }
+
+            // 闸杆类型：包含全部设备
+            const poleMap = {};
+            devices.forEach(d => {
+                const type = d.poleType || '未知';
+                poleMap[type] = (poleMap[type] || 0) + 1;
+            });
+            const poleStr = Object.entries(poleMap).map(([k, v]) => `${k} ${v}`).join(' | ') || '--';
+            document.getElementById('poleTypes').textContent = poleStr;
+        }
+
+        // ---------------- Popup 内容 ----------------
+        function buildListHTML(devices) {
+            const items = devices.map(d => `
+                <div class="popup-list-item" onclick="event.stopPropagation(); window.__selectDevice(${d.__id})">
+                    <div>
+                        <div class="pli-name">${esc(d.deviceName || d.radarSN || '未知设备')}</div>
+                        <div class="pli-sub">SN: ${esc(d.radarSN || '--')}${d.installSide ? ' · ' + esc(d.installSide) : ''}</div>
+                    </div>
+                    <div class="pli-arrow">›</div>
+                </div>`).join('');
+            return `
+                <div class="popup-title">📍 该位置共 ${devices.length} 台设备</div>
+                <div class="popup-hint">点击下方设备查看详细信息</div>
+                <div class="popup-list">${items}</div>
+            `;
+        }
+
+        function buildDetailHTML(dev, showBack) {
+            const d = parseDate(dev.timestamp);
+            const timeStr = d ? d.toLocaleString('zh-CN') : (dev.timestamp || '--');
+            const temp = (dev.temperature !== null && dev.temperature !== undefined && !isNaN(dev.temperature))
+                ? dev.temperature + ' °C' : '--';
+            const len = (dev.poleLength !== null && dev.poleLength !== undefined && !isNaN(dev.poleLength))
+                ? dev.poleLength + ' m' : '--';
+            return `
+                ${showBack ? '<div class="popup-back" onclick="event.stopPropagation(); window.__backToList()">← 返回设备列表</div>' : ''}
+                <div class="popup-title">${esc(dev.deviceName || dev.radarSN || '未知设备')}</div>
+                <div class="popup-row"><span class="lbl">雷达SN</span><span class="val">${esc(dev.radarSN || '--')}</span></div>
+                <div class="popup-row"><span class="lbl">安装侧</span><span class="val">${esc(dev.installSide || '--')}</span></div>
+                <div class="popup-row"><span class="lbl">闸杆类型</span><span class="val">${esc(dev.poleType || '--')}</span></div>
+                <div class="popup-row"><span class="lbl">杆长</span><span class="val">${esc(len)}</span></div>
+                <div class="popup-row"><span class="lbl">温度</span><span class="val">${esc(temp)}</span></div>
+                <div class="popup-row"><span class="lbl">固件版本</span><span class="val">${esc(dev.firmware || '--')}</span></div>
+                <div class="popup-row"><span class="lbl">城市</span><span class="val">${esc(dev.city || '--')}</span></div>
+                <div class="popup-row"><span class="lbl">地址</span><span class="val">${esc(dev.address || '--')}</span></div>
+                <div class="popup-row"><span class="lbl">更新时间</span><span class="val">${esc(timeStr)}</span></div>
+            `;
+        }
+
+        // 直接操作 DOM 替换弹窗内容，避免 Leaflet setContent 引发弹窗关闭/重排闪烁
+        function replacePopupContent(marker, html) {
+            if (!marker) return;
+            const popup = marker.getPopup();
+            if (!popup || !popup.isOpen()) return;
+            const container = popup.getElement();
+            if (!container) return;
+            const contentNode = container.querySelector('.leaflet-popup-content');
+            if (!contentNode) return;
+
+            contentNode.innerHTML = html;
+
+            try {
+                if (typeof popup._updateLayout === 'function') popup._updateLayout();
+                if (typeof popup._updatePosition === 'function') popup._updatePosition();
+                if (typeof popup._adjustPan === 'function') popup._adjustPan();
+            } catch (err) { /* ignore */ }
+        }
+
+        window.__selectDevice = function(id) {
+            const dev = deviceIndex.get(id);
+            if (!dev || !activeMarker) return;
+            const multi = activeMarker.__devices && activeMarker.__devices.length > 1;
+            replacePopupContent(activeMarker, buildDetailHTML(dev, multi));
+        };
+
+        window.__backToList = function() {
+            if (!activeMarker || !activeMarker.__devices) return;
+            replacePopupContent(activeMarker, buildListHTML(activeMarker.__devices));
+        };
+
+        // ---------------- 渲染 Marker ----------------
+        function groupByLocation(devices) {
+            const groups = new Map();
+            devices.forEach(d => {
+                // 保留 5 位小数 ≈ 1 米精度，视为同一位置
+                const key = `${d.location.lat.toFixed(5)},${d.location.lng.toFixed(5)}`;
+                let g = groups.get(key);
+                if (!g) {
+                    g = { key, lat: d.location.lat, lng: d.location.lng, devices: [] };
+                    groups.set(key, g);
+                }
+                g.devices.push(d);
+            });
+            return Array.from(groups.values());
+        }
+
+        function getSideColor(side) {
+            if (side.includes('左侧')) return '#3b82f6';
+            if (side.includes('右侧')) return '#f59e0b';
+            return '#8b5cf6';
+        }
+
+        function createDotIcon(color) {
+            return L.divIcon({
+                html: `<div style="background:${color}; width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,0.8); box-shadow: 0 0 12px ${color}88;"></div>`,
+                className: '',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+            });
+        }
+
+        function createCountIcon(count) {
+            return L.divIcon({
+                html: `<div style="
+                        background: linear-gradient(135deg,#22d3ee,#3b82f6);
+                        color:#fff; width:26px; height:26px; border-radius:50%;
+                        display:flex; align-items:center; justify-content:center;
+                        font-size:11px; font-weight:700; letter-spacing:-0.5px;
+                        border:2px solid rgba(255,255,255,0.85);
+                        box-shadow: 0 0 14px rgba(34,211,238,0.85);">${count}</div>`,
+                className: '',
+                iconSize: [26, 26],
+                iconAnchor: [13, 13],
+            });
+        }
+
+        function renderMarkers(devices) {
+            markerLayer.clearLayers();
+            deviceIndex.clear();
+            activeMarker = null;
+
+            // 只对有位置的设备打点
+            const locatedDevices = devices.filter(d => hasLocation(d));
+
+            if (locatedDevices.length === 0) {
+                document.getElementById('loadingTip').style.display = 'block';
+                document.getElementById('loadingTip').innerHTML = '<span class="icon">📭</span> 暂无带位置的设备数据';
+                return;
+            }
+            document.getElementById('loadingTip').style.display = 'none';
+
+            const groups = groupByLocation(locatedDevices);
+
+            groups.forEach(g => {
+                g.devices.forEach(d => deviceIndex.set(d.__id, d));
+
+                const isMulti = g.devices.length > 1;
+                const icon = isMulti
+                    ? createCountIcon(g.devices.length)
+                    : createDotIcon(getSideColor(g.devices[0].installSide));
+
+                const marker = L.marker([g.lat, g.lng], { icon }).addTo(markerLayer);
+                marker.__devices = g.devices;
+
+                marker.bindPopup(function() {
+                    return marker.__devices.length > 1
+                        ? buildListHTML(marker.__devices)
+                        : buildDetailHTML(marker.__devices[0], false);
+                }, { maxWidth: 320, minWidth: 200 });
+
+                marker.on('popupopen', function() { activeMarker = marker; });
+                marker.on('popupclose', function() { if (activeMarker === marker) activeMarker = null; });
+            });
+
+            fitToMarkers();
+        }
+
+        // ---------------- 图表 ----------------
+        function updateCharts(devices) {
+            if (!chartFirmware) {
+                chartFirmware = echarts.init(document.getElementById('chartFirmware'));
+                chartPoleType = echarts.init(document.getElementById('chartPoleType'));
+                chartPoleLength = echarts.init(document.getElementById('chartPoleLength'));
+                chartMonthly = echarts.init(document.getElementById('chartMonthly'));
+                window.addEventListener('resize', () => {
+                    chartFirmware.resize();
+                    chartPoleType.resize();
+                    chartPoleLength.resize();
+                    chartMonthly.resize();
+                });
+            }
+
+            // 固件版本柱状图
+            const fwMap = {};
+            devices.forEach(d => {
+                const fw = d.firmware || '未知';
+                fwMap[fw] = (fwMap[fw] || 0) + 1;
+            });
+            const fwData = Object.entries(fwMap).sort((a, b) => b[1] - a[1]);
+            chartFirmware.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '8%', right: '5%', top: '10%', bottom: '12%' },
+                xAxis: {
+                    type: 'category',
+                    data: fwData.map(item => item[0]),
+                    axisLabel: { color: '#94a3b8', fontSize: 9, interval: 0, rotate: 30 },
+                    axisLine: { lineStyle: { color: '#2d3a4f' } },
+                },
+                yAxis: {
+                    type: 'value',
+                    minInterval: 1,
+                    splitLine: { lineStyle: { color: '#1e2a3a' } },
+                    axisLabel: { color: '#94a3b8', fontSize: 9 },
+                },
+                series: [{
+                    type: 'bar',
+                    data: fwData.map(item => item[1]),
+                    barWidth: '50%',
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#60b0ff' },
+                            { offset: 1, color: '#3b82f6' }
+                        ])
+                    }
+                }]
+            }, true);
+
+            // 闸杆类型饼图
+            const poleMap = {};
+            devices.forEach(d => {
+                const type = d.poleType || '未知';
+                poleMap[type] = (poleMap[type] || 0) + 1;
+            });
+            const poleData = Object.entries(poleMap).map(([name, value]) => ({ name, value }));
+            chartPoleType.setOption({
+                tooltip: { trigger: 'item' },
+                legend: {
+                    orient: 'vertical',
+                    right: '5%',
+                    top: 'center',
+                    textStyle: { color: '#cbd5e1', fontSize: 10 },
+                    itemWidth: 10,
+                    itemHeight: 10,
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['45%', '70%'],
+                    center: ['38%', '50%'],
+                    avoidLabelOverlap: false,
+                    itemStyle: {
+                        borderRadius: 6,
+                        borderColor: '#0a1628',
+                        borderWidth: 1
+                    },
+                    label: {
+                        color: '#cbd5e1',
+                        fontSize: 10,
+                        formatter: '{b}\n{d}%'
+                    },
+                    labelLine: { lineStyle: { color: '#475569' } },
+                    data: poleData,
+                    color: ['#60b0ff', '#f59e0b', '#8b5cf6', '#34d399', '#f472b6']
+                }]
+            }, true);
+
+            // 杆长分段柱状图
+            const lengthSegments = { '<2m': 0, '2~4m': 0, '>4m': 0 };
+            devices.forEach(d => {
+                const len = d.poleLength;
+                if (len === null || len === undefined || isNaN(len)) return;
+                if (len < 2) lengthSegments['<2m']++;
+                else if (len >= 2 && len <= 4) lengthSegments['2~4m']++;
+                else lengthSegments['>4m']++;
+            });
+            const segData = Object.entries(lengthSegments);
+            chartPoleLength.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '8%', right: '5%', top: '10%', bottom: '12%' },
+                xAxis: {
+                    type: 'category',
+                    data: segData.map(item => item[0]),
+                    axisLabel: { color: '#94a3b8', fontSize: 10 },
+                    axisLine: { lineStyle: { color: '#2d3a4f' } },
+                },
+                yAxis: {
+                    type: 'value',
+                    minInterval: 1,
+                    splitLine: { lineStyle: { color: '#1e2a3a' } },
+                    axisLabel: { color: '#94a3b8', fontSize: 9 },
+                },
+                series: [{
+                    type: 'bar',
+                    data: segData.map(item => item[1]),
+                    barWidth: '40%',
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#f59e0b' },
+                            { offset: 1, color: '#d97706' }
+                        ])
+                    }
+                }]
+            }, true);
+
+            // 月度趋势曲线图
+            const monthMap = {};
+            devices.forEach(d => {
+                const key = getMonthKey(d);
+                if (!key) return;
+                monthMap[key] = (monthMap[key] || 0) + 1;
+            });
+            const sortedMonths = Object.keys(monthMap).sort();
+            const monthValues = sortedMonths.map(m => monthMap[m]);
+            chartMonthly.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: '8%', right: '5%', top: '10%', bottom: '12%' },
+                xAxis: {
+                    type: 'category',
+                    data: sortedMonths,
+                    axisLabel: { color: '#94a3b8', fontSize: 9, interval: 0, rotate: 20 },
+                    axisLine: { lineStyle: { color: '#2d3a4f' } },
+                },
+                yAxis: {
+                    type: 'value',
+                    minInterval: 1,
+                    splitLine: { lineStyle: { color: '#1e2a3a' } },
+                    axisLabel: { color: '#94a3b8', fontSize: 9 },
+                },
+                series: [{
+                    type: 'line',
+                    data: monthValues,
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: { color: '#34d399', width: 2 },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(52, 211, 153, 0.3)' },
+                            { offset: 1, color: 'rgba(52, 211, 153, 0.0)' }
+                        ])
+                    },
+                    itemStyle: { color: '#34d399' }
+                }]
+            }, true);
+
+            [chartFirmware, chartPoleType, chartPoleLength, chartMonthly].forEach(chart => chart.resize());
+        }
+
+        // ---------------- 搜索 ----------------
+        function matchesQuery(dev, type, q) {
+            const q2 = q.replace(/^(\d{4})-(\d)$/, '$1-0$2');
+            const sn = (dev.radarSN || '').toLowerCase();
+            const name = (dev.deviceName || '').toLowerCase();
+            const month = getMonthKey(dev).toLowerCase();
+            const city = (dev.city || '').toLowerCase();
+            const addr = (dev.address || '').toLowerCase();
+            const hit = s => s.includes(q) || s.includes(q2);
+
+            switch (type) {
+                case 'sn':    return hit(sn) || hit(name);
+                case 'month': return hit(month);
+                case 'city':  return hit(city) || hit(addr);
+                default:      return hit(sn) || hit(name) || hit(month) || hit(city) || hit(addr);
+            }
+        }
+
+        function updateSearchSuggestions() {
+            const months = new Set();
+            const cities = new Set();
+            allDevices.forEach(d => {
+                const m = getMonthKey(d);
+                if (m) months.add(m);
+                if (d.city) cities.add(d.city);
+            });
+            monthOptions = Array.from(months).sort().reverse();
+            cityOptions = Array.from(cities).sort();
+            refreshDatalist();
+        }
+
+        function refreshDatalist() {
+            const type = document.getElementById('searchType').value;
+            const dl = document.getElementById('searchSuggestions');
+            let opts = [];
+            if (type === 'month') opts = monthOptions;
+            else if (type === 'city') opts = cityOptions;
+            else if (type === 'all') opts = [...monthOptions, ...cityOptions];
+            dl.innerHTML = opts.map(o => `<option value="${esc(o)}"></option>`).join('');
+        }
+
+        function updateResultBadge(keyword, count) {
+            const badge = document.getElementById('resultBadge');
+            if (!keyword) {
+                badge.style.display = 'none';
+                return;
+            }
+            badge.style.display = 'inline-block';
+            badge.textContent = count > 0 ? `🔍 命中 ${count} 台` : '🔍 无匹配结果';
+            badge.classList.toggle('empty', count === 0);
+        }
+
+        let searchTimer = null;
+        function applyFilter() {
+            const type = document.getElementById('searchType').value;
+            const raw = document.getElementById('searchInput').value.trim();
+            const q = raw.toLowerCase();
+
+            let filtered;
+            if (!q) {
+                filtered = allDevices;
+            } else {
+                filtered = allDevices.filter(d => matchesQuery(d, type, q));
+            }
+
+            currentDevices = filtered;
+            updateStats(filtered);
+            renderMarkers(filtered);
+            updateCharts(filtered);
+            updateResultBadge(raw, filtered.length);
+        }
+
+        function scheduleFilter() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(applyFilter, 220);
+        }
+
+        function resetSearch() {
+            document.getElementById('searchInput').value = '';
+            applyFilter();
+        }
+
+        // ---------------- 文件处理 ----------------
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const records = parseExcelData(workbook);
+                    if (!records) return;
+
+                    const latest = getLatestBySN(records);
+
+                    // 分配唯一 id（后续筛选/详情定位使用）
+                    allDevices = latest.map((d, i) => {
+                        d.__id = i;
+                        return d;
+                    });
+
+                    const locatedCount = allDevices.filter(d => hasLocation(d)).length;
+                    document.getElementById('fileStatus').textContent =
+                        `✅ ${allDevices.length} 个设备 (${locatedCount} 有位置 / ${records.length} 条)`;
+                    document.getElementById('fileStatus').style.color = '#93c5fd';
+
+                    // 重置搜索
+                    document.getElementById('searchInput').value = '';
+                    updateSearchSuggestions();
+
+                    currentDevices = allDevices;
+                    updateStats(allDevices);
+                    renderMarkers(allDevices);
+                    updateCharts(allDevices);
+                    updateResultBadge('', allDevices.length);
+                } catch (err) {
+                    alert('解析失败：' + err.message);
+                    console.error(err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ---------------- 事件绑定 ----------------
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) handleFile(file);
+            this.value = '';
+        });
+
+        const searchInput = document.getElementById('searchInput');
+        const searchType = document.getElementById('searchType');
+
+        searchInput.addEventListener('input', scheduleFilter);
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                clearTimeout(searchTimer);
+                applyFilter();
+            }
+            if (e.key === 'Escape') resetSearch();
+        });
+
+        searchType.addEventListener('change', function() {
+            const map = {
+                all: '输入 SN / 月份 / 城市...',
+                sn: '输入雷达SN或设备名称...',
+                month: '选择或输入 如 2025-01',
+                city: '输入城市 如 深圳市',
+            };
+            searchInput.placeholder = map[this.value] || '搜索...';
+            refreshDatalist();
+            scheduleFilter();
+        });
+
+        document.getElementById('clearSearchBtn').addEventListener('click', resetSearch);
+
+        // 拖拽上传
+        const dropArea = document.querySelector('.map-wrapper');
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = '#60b0ff';
+        });
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.style.borderColor = 'rgba(255,255,255,0.05)';
+        });
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = 'rgba(255,255,255,0.05)';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    handleFile(file);
+                } else {
+                    alert('请上传 Excel 文件 (.xlsx 或 .xls)');
+                }
+            }
+        });
+
+        // ---------------- 启动 ----------------
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            updateCharts([]);
+        });
+    </script>
+</body>
+</html>
