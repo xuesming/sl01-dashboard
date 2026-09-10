@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>SL01安装信息可视化平台</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -16,17 +16,23 @@
             padding: 0;
             box-sizing: border-box;
             font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            height: 100%;
         }
         body {
             background: #0a1628;
             color: #e8edf5;
-            height: 100vh;
+            height: 100vh;           /* 旧浏览器回退 */
+            height: 100dvh;          /* 现代移动端 */
             overflow: hidden;
+            touch-action: manipulation;
         }
         #dashboard {
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             padding: 12px 16px 16px 16px;
         }
         .header {
@@ -69,10 +75,15 @@
             transition: 0.3s;
             backdrop-filter: blur(4px);
             white-space: nowrap;
+            -webkit-user-select: none;
+            user-select: none;
         }
         .upload-btn:hover {
             background: rgba(255, 255, 255, 0.14);
             border-color: #60b0ff;
+        }
+        .upload-btn:active {
+            transform: scale(0.96);
         }
         .upload-btn input {
             display: none;
@@ -127,6 +138,7 @@
             outline: none;
             width: 170px;
             padding: 4px 2px;
+            min-width: 0;
         }
         .search-input::placeholder {
             color: #64748b;
@@ -252,10 +264,15 @@
             z-index: 1000;
             transition: 0.3s;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            -webkit-user-select: none;
+            user-select: none;
         }
         .reset-view-btn:hover {
             background: rgba(40, 70, 120, 0.9);
             border-color: #60b0ff;
+        }
+        .reset-view-btn:active {
+            transform: translateX(-50%) scale(0.96);
         }
         .charts-panel {
             flex: 2;
@@ -299,7 +316,7 @@
             color: #1e293b;
             font-size: 12px;
             line-height: 1.5;
-            min-width: 190px;
+            min-width: 160px;
         }
         .leaflet-popup-content .popup-title {
             font-weight: 700;
@@ -349,7 +366,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            padding: 6px 8px;
+            padding: 8px 8px;
             border-radius: 8px;
             cursor: pointer;
             border-bottom: 1px solid #f1f5f9;
@@ -360,6 +377,9 @@
         }
         .leaflet-popup-content .popup-list-item:hover {
             background: #eff6ff;
+        }
+        .leaflet-popup-content .popup-list-item:active {
+            background: #dbeafe;
         }
         .leaflet-popup-content .pli-name {
             font-weight: 600;
@@ -383,13 +403,16 @@
             color: #2563eb;
             cursor: pointer;
             margin-bottom: 6px;
-            padding: 2px 10px;
+            padding: 4px 12px;
             background: #eff6ff;
             border-radius: 20px;
             user-select: none;
         }
         .leaflet-popup-content .popup-back:hover {
             background: #dbeafe;
+        }
+        .leaflet-popup-content .popup-back:active {
+            background: #bfdbfe;
         }
 
         .loading-tip {
@@ -413,23 +436,190 @@
             margin-bottom: 6px;
         }
 
+        /* ============================================================
+           响应式适配
+           ============================================================ */
+
+        /* ---------- 平板 / 大手机 (≤ 900px) ---------- */
         @media (max-width: 900px) {
-            .main-content {
+            /* 移动端允许纵向滚动，避免内容被压扁 */
+            body {
+                overflow-x: hidden;
+                overflow-y: auto;
+                height: auto;
+                min-height: 100vh;
+                min-height: 100dvh;
+            }
+            #dashboard {
+                height: auto;
+                min-height: 100vh;
+                min-height: 100dvh;
+                padding: 10px 12px 14px 12px;
+            }
+
+            /* 头部改为纵向堆叠 */
+            .header {
                 flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
             }
-            .map-wrapper {
-                flex: 2;
-                min-height: 300px;
+            .header h1 {
+                font-size: 18px;
+                text-align: center;
+                white-space: normal;
             }
-            .charts-panel {
-                flex: 1;
-                min-height: 300px;
+            .header-right {
+                justify-content: center;
+                gap: 8px;
             }
-            .chart-row {
-                flex-direction: column;
+            .search-area {
+                flex: 1 1 100%;
+                order: -1;   /* 搜索区排到最前 */
             }
             .search-input {
-                width: 110px;
+                flex: 1;
+                width: auto;
+            }
+            .status-badge,
+            .upload-btn {
+                font-size: 12px;
+                padding: 5px 12px;
+            }
+
+            /* 统计栏改为 2×2 网格 */
+            .stats {
+                gap: 8px;
+                padding: 10px 0 8px 0;
+            }
+            .stat-item {
+                flex: 1 1 calc(50% - 4px);
+                min-width: 0;
+                padding: 8px 8px;
+            }
+            .stat-item .label {
+                font-size: 10px;
+            }
+            .stat-item .value {
+                font-size: 20px;
+            }
+            .stat-item .value small {
+                font-size: 11px;
+            }
+
+            /* 主内容改为纵向堆叠 */
+            .main-content {
+                flex-direction: column;
+                gap: 12px;
+                min-height: auto;
+            }
+            .map-wrapper {
+                flex: none;
+                height: 46vh;
+                min-height: 280px;
+                max-height: 500px;
+            }
+            .charts-panel {
+                flex: none;
+                gap: 10px;
+            }
+            .chart-row {
+                flex-direction: row;
+                gap: 10px;
+                min-height: 200px;
+            }
+            .chart-box {
+                min-height: 200px;
+            }
+            .chart-container {
+                min-height: 170px;
+            }
+            .reset-view-btn {
+                bottom: 14px;
+                padding: 8px 18px;
+                font-size: 13px;
+            }
+        }
+
+        /* ---------- 手机 (≤ 600px) ---------- */
+        @media (max-width: 600px) {
+            #dashboard {
+                padding: 8px 10px 12px 10px;
+            }
+            .header h1 {
+                font-size: 16px;
+            }
+            .search-input {
+                font-size: 14px; /* ≥16px 以下仍然可读，也避免 iOS 自动放大 */
+            }
+            .search-select {
+                font-size: 12px;
+            }
+            .status-badge {
+                padding: 3px 10px;
+                font-size: 11px;
+            }
+            .upload-btn {
+                padding: 6px 14px;
+                font-size: 12px;
+            }
+
+            /* 地图略矮一点 */
+            .map-wrapper {
+                height: 42vh;
+                min-height: 240px;
+            }
+
+            /* 图表纵向堆叠 */
+            .chart-row {
+                flex-direction: column;
+                gap: 10px;
+                min-height: auto;
+            }
+            .chart-box {
+                min-height: 200px;
+            }
+            .chart-container {
+                min-height: 170px;
+            }
+
+            /* popup 里的字号略小一点 */
+            .leaflet-popup-content {
+                font-size: 12px;
+                min-width: 150px;
+            }
+            .leaflet-popup-content .popup-title {
+                font-size: 14px;
+            }
+            .leaflet-popup-content .popup-row {
+                gap: 8px;
+            }
+            .leaflet-popup-content .popup-list-item {
+                padding: 9px 8px;
+            }
+        }
+
+        /* ---------- 小屏手机 (≤ 380px) ---------- */
+        @media (max-width: 380px) {
+            .header h1 {
+                font-size: 15px;
+            }
+            .stat-item .value {
+                font-size: 18px;
+            }
+            .stat-item .value small {
+                font-size: 10px;
+            }
+            .map-wrapper {
+                height: 40vh;
+                min-height: 220px;
+            }
+        }
+
+        /* ---------- 横屏手机（高度较矮时地图别太高） ---------- */
+        @media (max-width: 900px) and (orientation: landscape) {
+            .map-wrapper {
+                height: 70vh;
+                max-height: 500px;
             }
         }
     </style>
@@ -463,7 +653,7 @@
             <div class="stat-item highlight clickable" id="deviceCountBox" title="点击切换：全部 / 有位置-全部">
                 <div class="label">设备总数</div>
                 <div class="value" id="totalDevices">0</div>
-                <div class="hint">点击切换</div>
+                <div class="hint">点击显示详情</div>
             </div>
             <div class="stat-item">
                 <div class="label">覆盖地点</div>
@@ -597,6 +787,12 @@
             return '';
         }
 
+        // 根据屏幕宽度计算 popup 合理宽度
+        function getPopupMaxWidth() {
+            const w = window.innerWidth || 1024;
+            return Math.max(200, Math.min(340, w - 60));
+        }
+
         // ---------------- 地图 ----------------
         function initMap() {
             map = L.map('map', {
@@ -605,6 +801,7 @@
                 minZoom: 3,
                 maxZoom: 18,
                 zoomControl: true,
+                tap: true, // 移动端友好
             });
 
             // 主瓦片：高德深色 (style=8)
@@ -644,6 +841,14 @@
                 deviceCountExpanded = !deviceCountExpanded;
                 renderDeviceCount();
             });
+
+            // 移动端旋转屏幕后，让地图重新计算尺寸
+            window.addEventListener('resize', function() {
+                if (map) setTimeout(() => map.invalidateSize(), 100);
+            });
+            window.addEventListener('orientationchange', function() {
+                if (map) setTimeout(() => map.invalidateSize(), 300);
+            });
         }
 
         function fitToMarkers() {
@@ -652,7 +857,7 @@
                 const group = new L.featureGroup(layers);
                 const bounds = group.getBounds();
                 if (bounds.isValid()) {
-                    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6, minZoom: 3 });
+                    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6, minZoom: 3 });
                 }
             } else {
                 map.setView([20, 0], 3);
@@ -712,7 +917,6 @@
                 };
             });
 
-            // 不再过滤无位置记录：保留全部数据用于统计与图表
             const locatedCount = records.filter(r => hasLocation(r)).length;
             if (locatedCount === 0) {
                 console.warn('未找到有效的经纬度数据，地图将不显示任何标记。');
@@ -912,6 +1116,7 @@
             document.getElementById('loadingTip').style.display = 'none';
 
             const groups = groupByLocation(locatedDevices);
+            const popupWidth = getPopupMaxWidth();
 
             groups.forEach(g => {
                 g.devices.forEach(d => deviceIndex.set(d.__id, d));
@@ -928,7 +1133,7 @@
                     return marker.__devices.length > 1
                         ? buildListHTML(marker.__devices)
                         : buildDetailHTML(marker.__devices[0], false);
-                }, { maxWidth: 320, minWidth: 200 });
+                }, { maxWidth: popupWidth, minWidth: 180, autoPanPadding: [30, 30] });
 
                 marker.on('popupopen', function() { activeMarker = marker; });
                 marker.on('popupclose', function() { if (activeMarker === marker) activeMarker = null; });
@@ -950,6 +1155,14 @@
                     chartPoleLength.resize();
                     chartMonthly.resize();
                 });
+                window.addEventListener('orientationchange', () => {
+                    setTimeout(() => {
+                        chartFirmware.resize();
+                        chartPoleType.resize();
+                        chartPoleLength.resize();
+                        chartMonthly.resize();
+                    }, 300);
+                });
             }
 
             // 固件版本柱状图
@@ -961,7 +1174,7 @@
             const fwData = Object.entries(fwMap).sort((a, b) => b[1] - a[1]);
             chartFirmware.setOption({
                 tooltip: { trigger: 'axis' },
-                grid: { left: '8%', right: '5%', top: '10%', bottom: '12%' },
+                grid: { left: '8%', right: '5%', top: '12%', bottom: '14%', containLabel: true },
                 xAxis: {
                     type: 'category',
                     data: fwData.map(item => item[0]),
@@ -998,7 +1211,7 @@
                 tooltip: { trigger: 'item' },
                 legend: {
                     orient: 'vertical',
-                    right: '5%',
+                    right: '2%',
                     top: 'center',
                     textStyle: { color: '#cbd5e1', fontSize: 10 },
                     itemWidth: 10,
@@ -1006,8 +1219,8 @@
                 },
                 series: [{
                     type: 'pie',
-                    radius: ['45%', '70%'],
-                    center: ['38%', '50%'],
+                    radius: ['42%', '68%'],
+                    center: ['35%', '50%'],
                     avoidLabelOverlap: false,
                     itemStyle: {
                         borderRadius: 6,
@@ -1037,7 +1250,7 @@
             const segData = Object.entries(lengthSegments);
             chartPoleLength.setOption({
                 tooltip: { trigger: 'axis' },
-                grid: { left: '8%', right: '5%', top: '10%', bottom: '12%' },
+                grid: { left: '8%', right: '5%', top: '12%', bottom: '14%', containLabel: true },
                 xAxis: {
                     type: 'category',
                     data: segData.map(item => item[0]),
@@ -1074,7 +1287,7 @@
             const monthValues = sortedMonths.map(m => monthMap[m]);
             chartMonthly.setOption({
                 tooltip: { trigger: 'axis' },
-                grid: { left: '8%', right: '5%', top: '10%', bottom: '12%' },
+                grid: { left: '8%', right: '5%', top: '12%', bottom: '14%', containLabel: true },
                 xAxis: {
                     type: 'category',
                     data: sortedMonths,
