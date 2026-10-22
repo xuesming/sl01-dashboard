@@ -724,6 +724,12 @@
         let deviceCountExpanded = false;
         let currentStats = { total: 0, located: 0 };
 
+        // ===================== 数据预过滤配置 =====================
+        // 圆心坐标（落入此圆心 radius 米半径内的设备整条记录丢弃）
+        const FILTER_CENTER = { lat: 40.13516818576389, lng: 116.46918891059028 };
+        const FILTER_RADIUS_METERS = 100;    // 半径，单位：米
+        const ENABLE_RADIUS_FILTER = true;   // 设为 false 可临时关闭
+
         // ---------------- 工具函数 ----------------
         function esc(s) {
             return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({
@@ -733,6 +739,46 @@
 
         function hasLocation(d) {
             return !!(d && d.location && d.location.lat && d.location.lng);
+        }
+
+        // 使用 Haversine 公式计算两个经纬度之间的球面距离（单位：米）
+        function distanceMeters(lat1, lng1, lat2, lng2) {
+            const R = 6371000;                   // 地球半径（米）
+            const toRad = x => x * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLng = toRad(lng2 - lng1);
+            const a = Math.sin(dLat / 2) ** 2 +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                      Math.sin(dLng / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        /**
+         * 预过滤：丢弃落入指定圆心 radius 米半径内的记录
+         * 无 location 的记录不受影响（不会被过滤）
+         * @returns {{ kept: Array, filteredCount: number }}
+         */
+        function filterOutNearby(records, center, radiusMeters) {
+            if (!ENABLE_RADIUS_FILTER || !center || !center.lat || !center.lng) {
+                return { kept: records, filteredCount: 0 };
+            }
+            const kept = [];
+            let filteredCount = 0;
+            records.forEach(rec => {
+                if (hasLocation(rec)) {
+                    const dist = distanceMeters(
+                        center.lat, center.lng,
+                        rec.location.lat, rec.location.lng
+                    );
+                    if (dist <= radiusMeters) {
+                        filteredCount++;
+                        return;   // 丢弃
+                    }
+                }
+                kept.push(rec);
+            });
+            return { kept, filteredCount };
         }
 
         // Excel 序列号 -> 本地日期字符串
@@ -777,14 +823,30 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // 从地址中提取「市」
+        // 从地址中提取「市」「自治州」等行政区划
         function extractCity(address) {
             if (!address || typeof address !== 'string') return '';
-            const m1 = address.match(/([^省市区县]{2,10}?)(市)/);
-            if (m1) return m1[1] + '市';
-            const m2 = address.match(/([\u4e00-\u9fa5]{2,10}?)(自治州|地区|盟)/);
-            if (m2) return m2[1] + m2[2];
-            return '';
+
+            // --- 1. 自治州 / 地区 / 盟 ---
+            const autoMatch = address.match(/([\u4e00-\u9fa5]{2,8}?(自治州|地区|盟))/);
+            if (autoMatch) {
+                let name = autoMatch[1];
+                // 去掉省/自治区/特别行政区前缀
+                name = name.replace(/^.*?(省|自治区|特别行政区|特别市)/, '');
+                return name || autoMatch[1];
+            }
+
+            // --- 2. 市 ---
+            const cityMatches = [...address.matchAll(/([\u4e00-\u9fa5]{2,6}?)市/g)];
+            if (cityMatches.length === 0) return '';
+
+            let best = null;
+            for (const m of cityMatches) {
+                let name = m[1] + '市';
+                name = name.replace(/^.*?(省|自治区|特别行政区|特别市)/, '');
+                if (!best || name.length < best.length) best = name;
+            }
+            return best;
         }
 
         // 根据屏幕宽度计算 popup 合理宽度
@@ -1402,17 +1464,126 @@
             applyFilter();
         }
 
+        // ---------------- 逆地址解析（Photon 免费 API） ----------------
+        // 缓存已解析的地址，避免重复请求（key: "lat,lng"）
+        const addressCache = new Map();
+
+        /**
+         * 使用 Photon 免费 API 进行逆地址解析
+         * Photon 是 OpenStreetMap 社区维护的免费服务，无需 API key
+         * @param {number} lat - 纬度
+         * @param {number} lng - 经度
+         * @returns {Promise<string>} 格式化的地址字符串
+         */
+        async function reverseGeocode(lat, lng) {
+            const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+            if (addressCache.has(cacheKey)) {
+                return addressCache.get(cacheKey);
+            }
+            try {
+                const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&limit=1`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                const features = data && data.features && data.features.length > 0
+                    ? data.features : null;
+                if (!features) throw new Error('NO_RESULT');
+
+                const p = features[0].properties || {};
+                // 按层级拼接尽量完整的地址
+                const parts = [
+                    p.country || '',
+                    p.state || '',
+                    p.county || '',
+                    p.city || '',
+                    p.district || '',
+                    p.suburb || '',
+                    p.street || '',
+                    p.name || '',
+                ].filter(x => x && x.length > 0);
+
+                let address = parts.join(' ');
+                if (!address) address = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+                addressCache.set(cacheKey, address);
+                return address;
+            } catch (e) {
+                console.warn('逆地址解析失败 (' + lat + ',' + lng + '):', e.message);
+                const fallback = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+                addressCache.set(cacheKey, fallback);
+                return fallback;
+            }
+        }
+
+        /**
+         * 批量解析缺失地址的设备坐标（去重后逐个调用）
+         * @param {Array} devices - 设备数组（会被就地修改 address 和 city）
+         * @param {Function} onProgress - 进度回调 (done, total)
+         */
+        async function resolveMissingAddresses(devices, onProgress) {
+            // 收集有位置但地址为空的唯一坐标
+            const coordSet = new Set();
+            const needResolve = [];
+            devices.forEach(d => {
+                if (hasLocation(d) && (!d.address || String(d.address).trim() === '')) {
+                    const key = `${d.location.lat.toFixed(5)},${d.location.lng.toFixed(5)}`;
+                    if (!coordSet.has(key)) {
+                        coordSet.add(key);
+                        needResolve.push({ lat: d.location.lat, lng: d.location.lng });
+                    }
+                }
+            });
+
+            if (needResolve.length === 0) return 0; // 不需要解析
+
+            const total = needResolve.length;
+            onProgress && onProgress(0, total);
+
+            // 逐个解析（Photon 限速宽松，串行更稳定）
+            for (let i = 0; i < needResolve.length; i++) {
+                const { lat, lng } = needResolve[i];
+                const address = await reverseGeocode(lat, lng);
+
+                // 回填到所有使用此坐标且地址为空的设备
+                const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+                devices.forEach(d => {
+                    if (hasLocation(d) &&
+                        `${d.location.lat.toFixed(5)},${d.location.lng.toFixed(5)}` === cacheKey &&
+                        (!d.address || String(d.address).trim() === '')) {
+                        d.address = address;
+                        d.city = extractCity(address);
+                    }
+                });
+
+                onProgress && onProgress(i + 1, total);
+            }
+            return total;
+        }
+
         // ---------------- 文件处理 ----------------
         function handleFile(file) {
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const data = e.target.result;
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const records = parseExcelData(workbook);
-                    if (!records) return;
+                    const rawRecords = parseExcelData(workbook);
+                    if (!rawRecords) return;
 
-                    const latest = getLatestBySN(records);
+                    // ==== 预过滤：丢弃落入圆心半径内的记录 ====
+                    const { kept: records, filteredCount } = filterOutNearby(
+                        rawRecords, FILTER_CENTER, FILTER_RADIUS_METERS
+                    );
+
+                    let latest = getLatestBySN(records);
+
+                    // --- 逆地址解析：补齐缺失的 address ---
+                    const emptyAddrWithLoc = latest.filter(d =>
+                        hasLocation(d) && (!d.address || String(d.address).trim() === '')
+                    ).length;
+                    const emptyAddrNoLoc = latest.filter(d =>
+                        !hasLocation(d) && (!d.address || String(d.address).trim() === '')
+                    ).length;
 
                     // 分配唯一 id（后续筛选/详情定位使用）
                     allDevices = latest.map((d, i) => {
@@ -1420,10 +1591,35 @@
                         return d;
                     });
 
+                    // 先显示初步状态，地址解析稍后补齐
                     const locatedCount = allDevices.filter(d => hasLocation(d)).length;
-                    document.getElementById('fileStatus').textContent =
-                        `✅ ${allDevices.length} 个设备 (${locatedCount} 有位置 / ${records.length} 条)`;
-                    document.getElementById('fileStatus').style.color = '#93c5fd';
+                    const statusEl = document.getElementById('fileStatus');
+                    statusEl.style.color = '#f59e0b';
+                    const filterHint = filteredCount > 0
+                        ? `· 已滤除 ${filteredCount} 条(圆心半径${FILTER_RADIUS_METERS}m)`
+                        : '';
+                    statusEl.textContent = `📊 ${allDevices.length} 个设备 (${locatedCount} 有位置) ${filterHint} ${emptyAddrWithLoc > 0 ? `· 正在解析 ${emptyAddrWithLoc} 个地址...` : ''}`;
+
+                    if (emptyAddrWithLoc > 0) {
+                        await resolveMissingAddresses(allDevices, (done, total) => {
+                            statusEl.textContent = `📊 ${allDevices.length} 个设备 (${locatedCount} 有位置) ${filterHint} · 解析地址 ${done}/${total}`;
+                        });
+                    }
+
+                    // 最终状态
+                    const finalLocated = allDevices.filter(d => hasLocation(d)).length;
+                    const resolvedCount = allDevices.filter(d =>
+                        hasLocation(d) && d.address && d.address !== `${d.location.lat.toFixed(4)},${d.location.lng.toFixed(4)}`
+                    ).length;
+                    statusEl.style.color = '#93c5fd';
+                    const finalFilterHint = filteredCount > 0
+                        ? `· 已滤除 ${filteredCount} 条(半径${FILTER_RADIUS_METERS}m)`
+                        : '';
+                    if (emptyAddrWithLoc > 0) {
+                        statusEl.textContent = `✅ ${allDevices.length} 个设备 (${finalLocated} 有位置)${finalFilterHint} · 已解析 ${resolvedCount} 个地址`;
+                    } else {
+                        statusEl.textContent = `✅ ${allDevices.length} 个设备 (${finalLocated} 有位置 / ${records.length} 条)${finalFilterHint}`;
+                    }
 
                     // 重置搜索
                     document.getElementById('searchInput').value = '';
